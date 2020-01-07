@@ -10,7 +10,7 @@
 <dependency>
   <groupId>com.chinamobile.cmos</groupId>
   <artifactId>sms-core</artifactId>
-  <version>2.1.9</version>
+  <version>2.1.10</version>
 </dependency>
 ```
 
@@ -38,7 +38,7 @@
 
   如果你了解netty的handler,那么请看AbstractBusinessHandler的源码即可，这是一个netty的handler.
   
-  如果你不了解netty, 你只许知道：
+  如果你不了解netty, 你只需知道：
   
   当连接刚刚建立时，smsgate会自动调用handler里的userEventTriggered方法；
   
@@ -125,7 +125,7 @@ smgp的协议解析代码是从 [SMS-China 的代码 ](https://github.com/clonal
 在48core，128G内存的物理服务器上测试协议解析效率：35K条/s, cpu使用率25%. 
 
 ## Build
-执行mvn package . jdk1.6以上. (如果用netty5则必须使用jdk1.7)
+执行mvn package . jdk1.6以上. 
 
 ## 增加了业务处理API
 业务层实现接口：BusinessHandlerInterface，或者继承AbstractBusinessHandler抽象类实现业务即可。 连接保活，消息重发，消息持久化，连接鉴权都已封装，不须要业务层再实现。
@@ -279,7 +279,7 @@ public class TestCMPPEndPoint {
 //		child.setWriteLimit(200);
 //		child.setReadLimit(200);
 		List<BusinessHandlerInterface> serverhandlers = new ArrayList<BusinessHandlerInterface>();
-		serverhandlers.add(new CMPPMessageReceiveHandler());
+		serverhandlers.add(new CMPPMessageReceiveHandler()); //在这个handler里接收短信
 		child.setBusinessHandlerSet(serverhandlers);
 		server.addchild(child);
 		
@@ -304,7 +304,7 @@ public class TestCMPPEndPoint {
 		client.setReSendFailMsg(true);
 		client.setSupportLongmsg(SupportLongMessage.BOTH);
 		List<BusinessHandlerInterface> clienthandlers = new ArrayList<BusinessHandlerInterface>();
-		clienthandlers.add( new CMPPSessionConnectedHandler(10000));
+		clienthandlers.add( new CMPPSessionConnectedHandler(10000));  //在这个handler里发送短信
 		client.setBusinessHandlerSet(clienthandlers);
 		
 		manager.addEndpointEntity(client);

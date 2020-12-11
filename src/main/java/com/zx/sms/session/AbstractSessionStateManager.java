@@ -25,7 +25,6 @@ import com.zx.sms.common.util.CachedMillisecondClock;
 import com.zx.sms.config.PropertiesUtils;
 import com.zx.sms.connect.manager.EndpointConnector;
 import com.zx.sms.connect.manager.EndpointEntity;
-import com.zx.sms.connect.manager.EndpointManager;
 import com.zx.sms.session.cmpp.SessionState;
 
 import io.netty.channel.Channel;
@@ -100,6 +99,8 @@ public abstract class AbstractSessionStateManager<K, T extends BaseMessage> exte
 	 * 会话刚建立时要发送的数据
 	 */
 	private boolean preSend;
+	
+	private long minDelay;
 
 	private boolean preSendover = false;
 	
@@ -133,7 +134,7 @@ public abstract class AbstractSessionStateManager<K, T extends BaseMessage> exte
 			@Override
 			public void run() {
 				// 取消重试队列里的任务
-				EndpointConnector conn = EndpointManager.INS.getEndpointConnector(entity);
+				EndpointConnector conn = entity.getSingletonConnector();
 				
 				for (Iterator<Map.Entry<K, Entry>> itor = msgRetryMap.entrySet().iterator();itor.hasNext(); ) {
 					Map.Entry<K, Entry> entry = itor.next();
@@ -218,10 +219,12 @@ public abstract class AbstractSessionStateManager<K, T extends BaseMessage> exte
 					
 					//响应延迟过大
 					long delay = delaycheck(sendtime);
+					//计算最小时延
+					minDelay =  Math.min(minDelay, delay);
 					if(delay > (entity.getRetryWaitTimeSec() * 1000/4)){
 						errlogger.warn("delaycheck . delay :{} , SequenceId :{}", delay,getSequenceId(response));
-						//接收response回复时延太高，有可能对端已经开始积压了，暂停发送1秒钟。
-						setchannelunwritable(ctx,1000);
+						//接收response回复时延太高，有可能对端已经开始积压了，暂停发送。
+						setchannelunwritable(ctx,delay-minDelay);
 					}
 					
 					Entry entry = msgRetryMap.get(key);
@@ -232,9 +235,9 @@ public abstract class AbstractSessionStateManager<K, T extends BaseMessage> exte
 						cancelRetry(entry, ctx.channel());
 						
 						//网关异常时会发送大量超速错误(result=8),造成大量重发，浪费资源。这里先停止发送，过40毫秒再回恢复
-						setchannelunwritable(ctx,40);
-						//400ms后重发
-						reWriteLater(ctx, entry.request, ctx.newPromise(), 400);
+						setchannelunwritable(ctx,delay);
+						//延迟后重发
+						reWriteLater(ctx, entry.request, ctx.newPromise(), delay);
 						
 					}else{
 						cancelRetry(entry, ctx.channel());
@@ -252,7 +255,7 @@ public abstract class AbstractSessionStateManager<K, T extends BaseMessage> exte
 
 	//查检发送req与收到res的时间差
 	private long delaycheck(long sendtime){
-		return CachedMillisecondClock.INS.now() - sendtime ;
+		return System.currentTimeMillis() - sendtime ;
 	}
 	
 	private void setchannelunwritable(final ChannelHandlerContext ctx,long millitime){
@@ -393,7 +396,7 @@ public abstract class AbstractSessionStateManager<K, T extends BaseMessage> exte
 			// 当程序执行到这里时，可能已收到resp消息，此时entry为空。
 			logger.warn("receive seq {} not exists in msgRetryMap,maybe response received before create retrytask .", seq);
 		}
-
+		
 	}
 
 	private Entry responseFutureDone(Entry entry,T response){
@@ -549,7 +552,7 @@ public abstract class AbstractSessionStateManager<K, T extends BaseMessage> exte
 		}
 	}
 
-	private void reWriteLater(final ChannelHandlerContext ctx, final T message, final ChannelPromise promise, final int delay) {
+	private void reWriteLater(final ChannelHandlerContext ctx, final T message, final ChannelPromise promise, final long delay) {
 		msgResend.schedule(new Runnable() {
 			@Override
 			public void run() {

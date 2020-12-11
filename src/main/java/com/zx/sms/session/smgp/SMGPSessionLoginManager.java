@@ -67,14 +67,15 @@ public class SMGPSessionLoginManager extends AbstractSessionLoginManager {
 			byte loginMode = message.getLoginMode();
 			if (entity instanceof SMGPServerEndpointEntity) {
 				SMGPServerEndpointEntity serverEntity = (SMGPServerEndpointEntity) entity;
-				EndpointEntity end =  serverEntity.getChild(username.trim());
-				if(end == null) return null;
 				
-				if(end.getChannelType()==ChannelType.DOWN && loginMode == 0){
+				if(loginMode == 0){
+					EndpointEntity end =  serverEntity.getChild(username.trim(),ChannelType.DOWN);
 					return end;
-				}else if(end.getChannelType()==ChannelType.UP && loginMode == 1){
+				}else if(loginMode == 1){
+					EndpointEntity end =  serverEntity.getChild(username.trim(),ChannelType.UP);
 					return end;
-				}else if(end.getChannelType()==ChannelType.DUPLEX && loginMode == 2){
+				}else if(loginMode == 2){
+					EndpointEntity end =  serverEntity.getChild(username.trim(),ChannelType.DUPLEX);
 					return end;
 				}
 			}
@@ -122,21 +123,26 @@ public class SMGPSessionLoginManager extends AbstractSessionLoginManager {
 
 	@Override
 	protected void changeProtoVersion(ChannelHandlerContext ctx, EndpointEntity entity, Object msg) throws Exception {
-
-		SMGPServerChildEndpointEntity childentity = (SMGPServerChildEndpointEntity)entity;
 		SMGPLoginMessage message = (SMGPLoginMessage)msg;
-		int version = message.getVersion();
-		//默认的是3.0的协议，如果不是则要更换解析器版本
-		if ((byte)0x30 != childentity.getClientVersion()) {
+		final short clientVersion = message.getVersion();
+		short aim_ver = clientVersion;
+		if(entity != null) {
+			SMGPServerChildEndpointEntity childentity = (SMGPServerChildEndpointEntity)entity;
+			//以服务端配置的版本为准
+			aim_ver = childentity.getClientVersion();
 			//发送ConnectRequest里的Version跟配置的不同
-			if(childentity.getClientVersion() != version){
-				logger.warn("receive version code {} ,expected version is {} .I would use version {}",version ,childentity.getClientVersion(),childentity.getClientVersion());
+			if(aim_ver != clientVersion){
+				logger.warn("receive version code {} ,expected version is {} .I would use version {}",clientVersion ,aim_ver,aim_ver);
 			}
+		}
+	
+		//默认的是3.0的协议，如果不是则要更换解析器版本
+		if ((byte)0x30 != aim_ver) {
 			
 			//以配置的协议版本为准
 			//更换协议解析器
-			logger.info("changeCodec to version:{}", childentity.getClientVersion());
-			ctx.pipeline().replace(GlobalConstance.codecName, GlobalConstance.codecName,new SMGPMessageCodec(childentity.getClientVersion()));
+			logger.info("changeCodec to version:{}", aim_ver);
+			ctx.pipeline().replace(GlobalConstance.codecName, GlobalConstance.codecName,new SMGPMessageCodec(aim_ver));
 		}
 	}
 
@@ -147,7 +153,7 @@ public class SMGPSessionLoginManager extends AbstractSessionLoginManager {
 		
 		SMGPLoginMessage req = (SMGPLoginMessage)message;
 		SMGPLoginRespMessage resp = new SMGPLoginRespMessage();
-		resp.setSequenceNumber(req.getSequenceNo());
+		resp.setSequenceNo(req.getSequenceNo());
 		resp.setStatus(0);
 		resp.setVersion(smgpentity.getClientVersion());
 		resp.setServerAuth(DigestUtils.md5(Bytes.concat(Ints.toByteArray((int)resp.getStatus()), req.getClientAuth(), smgpentity
@@ -163,7 +169,7 @@ public class SMGPSessionLoginManager extends AbstractSessionLoginManager {
 			SMGPLoginMessage message = (SMGPLoginMessage)msg;
 			// 认证失败
 			SMGPLoginRespMessage resp = new SMGPLoginRespMessage();
-			resp.setSequenceNumber(message.getSequenceNo());
+			resp.setSequenceNo(message.getSequenceNo());
 			resp.setStatus((int)status);
 			ChannelFuture promise = ctx.writeAndFlush(resp);
 

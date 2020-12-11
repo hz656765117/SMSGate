@@ -1,12 +1,10 @@
 package com.zx.sms.codec.cmpp;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-
 import java.util.Random;
 
 import org.junit.Assert;
 import org.junit.Test;
+import org.marre.sms.SmsDcs;
 import org.marre.sms.SmsMessage;
 import org.marre.sms.SmsPort;
 import org.marre.sms.SmsPortAddressedTextMessage;
@@ -19,6 +17,9 @@ import org.marre.wap.push.WapSLPush;
 import com.zx.sms.codec.AbstractTestMessageCodec;
 import com.zx.sms.codec.cmpp.msg.CmppSubmitRequestMessage;
 import com.zx.sms.common.util.MsgId;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 
 public class TestCmppSubmitRequestMessageCodec  extends AbstractTestMessageCodec<CmppSubmitRequestMessage>{
 
@@ -38,9 +39,9 @@ public class TestCmppSubmitRequestMessageCodec  extends AbstractTestMessageCodec
 		
 		int length = buf.readableBytes();
 		
-		Assert.assertEquals(length, buf.readUnsignedInt());
-		Assert.assertEquals(msg.getPacketType().getCommandId(), buf.readUnsignedInt());
-		Assert.assertEquals(msg.getHeader().getSequenceId(), buf.readUnsignedInt());
+		Assert.assertEquals(length, buf.readInt());
+		Assert.assertEquals(msg.getPacketType().getCommandId(), buf.readInt());
+		Assert.assertEquals(msg.getHeader().getSequenceId(), buf.readInt());
 		
 	
 		
@@ -62,7 +63,7 @@ public class TestCmppSubmitRequestMessageCodec  extends AbstractTestMessageCodec
 	@Test
 	public void testASCIIcode()
 	{
-		testlongCodec(createTestReq("12345678901AssBC56789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890"));
+		testlongCodec(createTestReq("12345678901AssBC56789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890abcdefghijklmnopqrstuvwxyzABCE"));
 	}
 	
 	
@@ -132,6 +133,17 @@ public class TestCmppSubmitRequestMessageCodec  extends AbstractTestMessageCodec
 		Assert.assertEquals(msg.getMsgContent(), ret.getMsgContent());
 	}
 	
+	
+	@Test
+	public void testGBKMsg(){
+
+		CmppSubmitRequestMessage msg = createTestReq("");
+		msg.setMsgContent(new SmsTextMessage("有没有发现，使用模型的表达要清晰易懂很多，而且也不需要做关于组合品的判断了，因为我们在系统中引入了更加贴近现实的对象模型（CombineBackO123456",new SmsDcs((byte)0x0f)));
+		
+		CmppSubmitRequestMessage ret =  testWapCodec(msg);
+		Assert.assertEquals(msg.getMsgContent(), ret.getMsgContent());
+	}
+	
 	private CmppSubmitRequestMessage createTestReq(String content) {
 
 		// 取时间，用来查看编码解码时间
@@ -156,8 +168,8 @@ public class TestCmppSubmitRequestMessageCodec  extends AbstractTestMessageCodec
 	    	copybuf.writeBytes(buf.copy());
 			int length = buf.readableBytes();
 			
-			Assert.assertEquals(length, buf.readUnsignedInt());
-			Assert.assertEquals(msg.getPacketType().getCommandId(), buf.readUnsignedInt());
+			Assert.assertEquals(length, buf.readInt());
+			Assert.assertEquals(msg.getPacketType().getCommandId(), buf.readInt());
 			
 
 			buf =(ByteBuf)channel().readOutbound();
@@ -182,8 +194,8 @@ public class TestCmppSubmitRequestMessageCodec  extends AbstractTestMessageCodec
 	    	copybuf.writeBytes(buf.copy());
 			int length = buf.readableBytes();
 			
-			Assert.assertEquals(length, buf.readUnsignedInt());
-			Assert.assertEquals(msg.getPacketType().getCommandId(), buf.readUnsignedInt());
+			Assert.assertEquals(length, buf.readInt());
+			Assert.assertEquals(msg.getPacketType().getCommandId(), buf.readInt());
 			
 
 			buf =(ByteBuf)channel().readOutbound();

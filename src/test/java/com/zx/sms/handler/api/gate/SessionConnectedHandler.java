@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 
 import com.zx.sms.BaseMessage;
 import com.zx.sms.common.util.ChannelUtil;
+import com.zx.sms.connect.manager.EndpointManager;
 import com.zx.sms.connect.manager.EventLoopGroupFactory;
 import com.zx.sms.connect.manager.ExitUnlimitCirclePolicy;
 import com.zx.sms.handler.api.AbstractBusinessHandler;
@@ -52,15 +53,16 @@ public abstract class SessionConnectedHandler extends AbstractBusinessHandler {
 
 	@Override
 	public void userEventTriggered(final ChannelHandlerContext ctx, Object evt) throws Exception {
-		final AtomicInteger tmptotal = new AtomicInteger(totleCnt.get());
+		final AtomicInteger tmptotal = totleCnt;
 		if (evt == SessionState.Connect) {
-
+					
 			final Channel ch = ctx.channel();
 			EventLoopGroupFactory.INS.submitUnlimitCircleTask(new Callable<Boolean>() {
 
 				@Override
 				public Boolean call() throws Exception {
-					int cnt = RandomUtils.nextInt() & 0x4ff;
+					int cnt = RandomUtils.nextInt() & 0x4fff;
+					Promise<BaseMessage> frefuture = null;
 					while (cnt > 0 && tmptotal.get() > 0) {
 						List<Promise<BaseMessage>> futures = null;
 						ChannelFuture chfuture = null;
@@ -72,7 +74,8 @@ public abstract class SessionConnectedHandler extends AbstractBusinessHandler {
 						
 						if (chfuture != null)
 							chfuture.sync();
-
+						cnt--;
+						tmptotal.decrementAndGet();
 						if (futures != null) {
 							try {
 								for (Promise<BaseMessage> future : futures) {
@@ -86,9 +89,7 @@ public abstract class SessionConnectedHandler extends AbstractBusinessHandler {
 											}
 										}
 									});
-									try {
-										future.sync();
-									}catch(Exception ex) {}
+									frefuture = future;
 								}
 
 							} catch (Exception e) {
@@ -97,10 +98,18 @@ public abstract class SessionConnectedHandler extends AbstractBusinessHandler {
 								tmptotal.decrementAndGet();
 								break;
 							}
+						}else {
+							//连接不可写了，等待上一个response回来
+							//再把消息发出去
+							ctx.writeAndFlush(msg);
+							
+							if(frefuture!=null) {
+								frefuture.sync();
+								frefuture = null;
+							}else {
+								break;
+							}
 						}
-					
-						cnt--;
-						tmptotal.decrementAndGet();
 					}
 					return true;
 				}
